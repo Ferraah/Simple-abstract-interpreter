@@ -5,9 +5,10 @@
 
 #include <variant>
 #include <cmath>
+#include <iostream>
 
 enum class BinOp {ADD, SUB, MUL, DIV};
-std::ostream& operator<<(std::ostream& os, BinOp op) {
+inline std::ostream& operator<<(std::ostream& os, BinOp op) {
     switch (op) {
         case BinOp::ADD: os << "+"; break;
         case BinOp::SUB: os << "-"; break;
@@ -18,7 +19,7 @@ std::ostream& operator<<(std::ostream& os, BinOp op) {
 }
 
 enum class LogicOp {LE, LEQ, GE, GEQ, EQ, NEQ};
-std::ostream& operator<<(std::ostream& os, LogicOp lop){
+inline std::ostream& operator<<(std::ostream& os, LogicOp lop){
     switch (lop){
         case LogicOp::LE: os << "<"; break;
         case LogicOp::LEQ: os << "<="; break;
@@ -31,7 +32,7 @@ std::ostream& operator<<(std::ostream& os, LogicOp lop){
 }
 
 enum class NodeType {VARIABLE, INTEGER, PRE_CON, POST_CON, ARITHM_OP, LOGIC_OP, DECLARATION, ASSIGNMENT, IFELSE, WHILELOOP, SEQUENCE};
-std::ostream& operator<<(std::ostream& os, NodeType type) {
+inline std::ostream& operator<<(std::ostream& os, NodeType type) {
     switch (type) {
         case NodeType::VARIABLE: os << "Variable"; break;
         case NodeType::INTEGER: os << "Integer"; break;
