@@ -4,12 +4,18 @@
 #include <utility>
 #include <algorithm>
 #include <climits>
+#include <assert.h>
+#include <iostream>
+
 
 class Interval {
     std::pair<int, int> interval;
     bool is_empty;
 public:
-    Interval(int a, int b): interval(a, b), is_empty(false) {}
+    Interval(int a, int b): is_empty(false) {
+        assert(a <= b);
+        interval = std::make_pair(a, b);
+    }
     Interval(): interval(-INT_MAX, +INT_MAX), is_empty(false) {}
     static Interval empty() {
         Interval empty_interval;
@@ -70,8 +76,11 @@ public:
         if (is_empty || other.is_empty)
             return empty();
 
-        if(other.interval.first == 0 && other.interval.second == 0)
+        if(other.interval.first == 0 && other.interval.second == 0){
+            std::cerr << "Division by zero" << std::endl;
+            // Division by zero
             return empty();
+        }
 
 
         // If there is zero in the interval, adjust the interval  
@@ -130,6 +139,17 @@ public:
         } else {
             std::cout << "[" << interval.first << ", " << interval.second << "]" << std::endl;
         }
+    }
+
+    friend std::ostream& operator<<(std::ostream& os, const Interval& interval) {
+        if (interval.is_empty) {
+            os << "⊥";
+        } else if(interval == Interval(-INT_MAX, +INT_MAX)){
+            os << "⊤";
+        } else {
+            os << "[" << interval.interval.first << ", " << interval.interval.second << "]";
+        }
+        return os;
     }
 };
 

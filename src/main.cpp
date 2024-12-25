@@ -69,5 +69,6 @@ int main(int argc, char** argv) {
 
     ai.solve_equations();
     ai.print_store();
+
     return 0;
 }

@@ -26,12 +26,16 @@ private:
     bool solve_step();
 
 
+    std::unique_ptr<semantics::BinaryOp> create_binop(const ASTNode& node);
+
 public:
 
     AbstractInterpreter() {
         // Push one empty store for invariant 0
         stores.push_back(Store());
     }
+
+
     /**
      * From the AST, create the equational system that we will solve to find the invariants
      */

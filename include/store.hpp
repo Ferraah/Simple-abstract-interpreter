@@ -31,7 +31,7 @@ public:
 
     void print() const {
         for(const auto& [var, interval] : invariants) {
-            std::cout << var << " -> [" << interval.lb() << ", " << interval.ub() << "]" << std::endl;
+            std::cout << var << " -> " << interval << std::endl;
         }
     }
 };

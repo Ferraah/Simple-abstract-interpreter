@@ -109,12 +109,12 @@ private:
         ASTNode var(std::any_cast<ASTNode>(sv[0]));
 
         // LB
-        ASTNode lb(NodeType::LOGIC_OP, std::string("<="));
+        ASTNode lb(NodeType::LOGIC_OP, LogicOp::GEQ);
         lb.children.push_back(std::any_cast<ASTNode>(sv[1]));
         lb.children.push_back(var);
 
         // UB 
-        ASTNode ub(NodeType::LOGIC_OP, std::string(">="));
+        ASTNode ub(NodeType::LOGIC_OP, LogicOp::LEQ);
         ub.children.push_back(std::any_cast<ASTNode>(sv[2]));
         ub.children.push_back(var);
 
