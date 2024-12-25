@@ -2,6 +2,7 @@
 
 
 void AbstractInterpreter::init_equations(const ASTNode& node) {
+    using namespace semantics;
 
     if(node.type == NodeType::DECLARATION){
         std::cout << "[Log] Declaration found." << std::endl;
@@ -11,10 +12,11 @@ void AbstractInterpreter::init_equations(const ASTNode& node) {
         std::string var = std::get<std::string>(child.value);
         // Save the node of this control point
         cp_nodes.push_back(std::make_unique<ASTNode>(child));
+
         // Create an assignment command 
-        commands.push_back([var](Store& store){
-            store[var] = Interval(); // Initialize interval to top element
-        });
+        auto sem_variable = std::make_unique<Variable>(var);
+        auto sem_declaration = std::make_unique<Declaration>(var);
+        commands.push_back(std::move(sem_declaration));
     }
     
     if(node.type == NodeType::ASSIGNMENT){
@@ -31,10 +33,12 @@ void AbstractInterpreter::init_equations(const ASTNode& node) {
             std::cout << "\t[Log] Assigning an integer." << std::endl;
             int value = std::get<int>(second_child.value);
             std::cout << "\t[Log] Value: " << value << std::endl;
+
             // Create an assignment command 
-            commands.push_back([var, value](Store& store){
-                store[var] = semantics::Expression::evaluate(value, store); // Evaluate the expression of a constant
-            });
+            auto sem_variable = std::make_unique<semantics::Constant>(value);
+            auto sem_assignment = std::make_unique<semantics::Assignment>(var, std::move(sem_variable));
+            commands.push_back(std::move(sem_assignment));
+    
         }
         else if(second_child.type == NodeType::VARIABLE){
             std::cout << "\t[Log] Assigning a variable." << std::endl;
@@ -42,10 +46,9 @@ void AbstractInterpreter::init_equations(const ASTNode& node) {
             std::cout << "\t[Log] Value: " << var_name << std::endl;
 
             // Create an assignment command 
-            commands.push_back([var, var_name](Store& store){
-                store[var] = semantics::Expression::evaluate(var_name, store);  
-                
-            });
+            auto sem_variable = std::make_unique<semantics::Variable>(var_name);
+            auto sem_assignment = std::make_unique<semantics::Assignment>(var_name, std::move(sem_variable));
+            commands.push_back(std::move(sem_assignment));
         }
     }
 
@@ -65,7 +68,7 @@ bool AbstractInterpreter::solve_step() {
     // For each command, execute it
     Store old_store(stores.back());
     for(auto& command : commands){
-        semantics::CommandInterpreter::evaluate(command, stores.back());
+        command->execute(stores.back());   
     }
 
     // Check if the fixed point is reached

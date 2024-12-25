@@ -14,7 +14,7 @@
 class AbstractInterpreter {
 private:
     // For each control point, create a command that will be executed and will modify the store
-    std::vector<semantics::Command> commands;
+    std::vector<std::unique_ptr<semantics::Command>> commands;
     // For each control point, store the invariants
     std::vector<Store> stores;
     // For each control point, store the node
