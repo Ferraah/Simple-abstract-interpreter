@@ -224,7 +224,7 @@ void AbstractInterpreter::init_equations(const ASTNode& node) {
             // Save the last control point id of the if body to later join it with the else body
             size_t if_last_cp_id = commands.size();
             std::cout << "[Log] If body last control point id: " << if_last_cp_id << std::endl;
-
+            
             // Check if there is an else branch
             if(node.children.size() == 3){
                 ASTNode else_body = node.children[2];
@@ -236,17 +236,18 @@ void AbstractInterpreter::init_equations(const ASTNode& node) {
                 for(const auto& child : else_body.children){
                     init_equations(child);
                 }
+
+                size_t else_last_cp_id = commands.size();
+                std::cout << "[Log] Else body last control point id: " << else_last_cp_id << std::endl;
+                // Now we merge the two branches, creating a new invariant that is the join of the last invariants for each branch
+                auto sem_unify = std::make_unique<JoinInvariants>(else_last_cp_id+1, std::vector<size_t>{if_last_cp_id, else_last_cp_id});
+                commands.push_back(std::move(sem_unify));
             }
-
-            // Save the last control point id of the else body to later join it with the if body
-            // If there is no else branch, the last control point id of the else body is the same as the last control point id of the if body
-            size_t else_last_cp_id = commands.size();
-            std::cout << "[Log] Else body last control point id: " << else_last_cp_id << std::endl;
-
-            // Now we merge the two branches, creating a new invariant that is the join of the last invariants for each branch
-            auto sem_unify = std::make_unique<JoinInvariants>(else_last_cp_id+1, std::vector<size_t>{if_last_cp_id, else_last_cp_id});
-            commands.push_back(std::move(sem_unify));
-
+            else{
+                // If there is no else branch, we just need to unify the last control point of the if branch
+                auto sem_unify = std::make_unique<JoinInvariants>(if_last_cp_id+1, std::vector<size_t>{original_cp_id, if_last_cp_id});
+                commands.push_back(std::move(sem_unify));
+            }
             return;
         }
 
