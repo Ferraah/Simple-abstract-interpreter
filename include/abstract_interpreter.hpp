@@ -1,7 +1,7 @@
 #ifndef ABSTRACT_INTERPRETER_HPP
 #define ABSTRACT_INTERPRETER_HPP
 
-#include "store.hpp"
+#include "invariant.hpp"
 #include "interval.hpp"
 #include "ast.hpp"
 #include "semantics.hpp"
@@ -11,30 +11,30 @@
 #include <memory>
 #include <variant>
 #include <assert.h>
+
+using InvariantsSystem = std::vector<Invariant>;
+using SystemSolverComponents = std::vector<std::unique_ptr<semantics::ControlPointAction>>;
+
 class AbstractInterpreter {
 private:
-    // For each control point, create a command that will be executed and will modify the store
-    std::vector<std::unique_ptr<semantics::Command>> commands;
-    // For each control point, store the invariants
-    std::vector<Store> stores;
-    // For each control point, store the node
-    std::vector<std::unique_ptr<ASTNode>> cp_nodes;
-    
+    // Components of the function which will update each invariant in the equational system
+    SystemSolverComponents commands;
+    // Number of invariants counted in the ATS
+    size_t invariants_count = 0;
+    // List of the invariants, which represents the environment at each control point
+    InvariantsSystem invariants;
+    // Invariant warnings, describing the control point and the error
+    std::unordered_map<size_t, std::string> warnings_list; 
+
     /**
      * Solve the equational system to find the invariants
      */
     bool solve_step();
 
 
-    std::unique_ptr<semantics::BinaryOp> create_binop(const ASTNode& node);
+    std::unique_ptr<semantics::BinaryOp> create_binop(const ASTNode& node, std::function<void(std::string)> add_warning_to_list);
 
 public:
-
-    AbstractInterpreter() {
-        // Push one empty store for invariant 0
-        stores.push_back(Store());
-    }
-
 
     /**
      * From the AST, create the equational system that we will solve to find the invariants
@@ -42,23 +42,39 @@ public:
     void init_equations(const ASTNode& node);
 
     /**
-     * Solve the equational system to find the invariants, calling solve_step until the fixed point is reached
+     * Solve the equational system to find the invariants, calling solve_step until the fixed point is reached.
+     * Evaluate the the correctness with respect to the post conditions and illegal operations. 
      */
     void solve_equations();
 
-        /**
-     * Evaluate the abstract syntax tree, searcing if there are any invariant violations
-     * @param node The root node of the AST
+    /**
+     * Print the store
      */
-    void eval(const ASTNode& node);
-
-
-    void print_store() const {
-        for(const auto& s : stores){
-            s.print();
+    void print_invariants() const {
+        size_t cp_id = 0;
+        for(const auto& i : invariants){
+            std::cout << "Control point " << cp_id << std::endl;
+            i.print();
+            std::cout << std::endl;
+            cp_id++;
         }
     }
     
+
+    void print_warnings() const {
+        std::cout << "--------- WARNINGS/ERRORS RECAP ---------" << std::endl;
+        for(const auto& [node_id, warning] : warnings_list) {
+            std::cout << "Control point " << node_id << ": ";
+            std::cout << warning << std::endl;
+        }
+        std::cout << "-----------------------------------------" << std::endl;
+    }
+
+    size_t last_inv_id() {
+        if(invariants_count == 0) return 0;
+        return invariants_count - 1;
+    }
+
 };
 
 

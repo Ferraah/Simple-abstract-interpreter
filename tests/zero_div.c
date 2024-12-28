@@ -1,11 +1,15 @@
 int a;
 int b;
 int c;
+int z;
 
 void main() {
   a = 1;
-  b = 0;
+  z = 0;
 
+  /*!npk b between 1 and 2 */
   c = a / b;
-  assert(a == 1);
+
+  c = (a / z)/z;
+  assert(a ==1);
 }

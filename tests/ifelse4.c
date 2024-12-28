@@ -8,7 +8,7 @@ void main() {
     a = 1;
   }
   else {
-    if(b == 1) {
+    if(b == 10) {
       a = 2;
     }
   }

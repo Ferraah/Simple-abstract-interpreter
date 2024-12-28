@@ -23,6 +23,9 @@ public:
         return empty_interval;
     }
 
+    void set_empty(bool empty) {
+        is_empty = empty;
+    }
     int lb() const {
         return is_empty ? 0 : interval.first;
     }
@@ -77,7 +80,6 @@ public:
             return empty();
 
         if(other.interval.first == 0 && other.interval.second == 0){
-            std::cerr << "Division by zero" << std::endl;
             // Division by zero
             return empty();
         }
@@ -115,18 +117,36 @@ public:
         return interval.first >= other.interval.first && interval.second <= other.interval.second;
     }
 
-    bool operator<=(const Interval& other) const {
-        return is_subset(other);
-    }
-
     bool operator==(const Interval& other) const {
-        if (is_empty && other.is_empty) return true;
-        if (is_empty || other.is_empty) return false;
-        return interval == other.interval;
+        return is_empty == other.is_empty && interval == other.interval;
     }
 
     bool operator!=(const Interval& other) const {
         return !(*this == other);
+    }
+
+    bool operator <=(const Interval& other) const {
+        if (is_empty) return true;
+        if (other.is_empty) return false;
+        return interval.second <= other.interval.first;
+    }
+
+    bool operator <(const Interval& other) const {
+        if (is_empty) return true;
+        if (other.is_empty) return false;
+        return interval.second < other.interval.first;
+    }
+
+    bool operator >=(const Interval& other) const {
+        if (is_empty) return false;
+        if (other.is_empty) return true;
+        return interval.first >= other.interval.second;
+    }
+
+    bool operator >(const Interval& other) const {
+        if (is_empty) return false;
+        if (other.is_empty) return true;
+        return interval.first > other.interval.second;
     }
 
     bool isEmpty() const {
