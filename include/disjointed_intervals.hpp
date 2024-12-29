@@ -25,10 +25,23 @@ public:
         intervals.insert(Interval(lb, ub));
     }
     
-    void join(const DisjointedIntervals& other) {
-        add(other);
+    DisjointedIntervals join(const DisjointedIntervals& other) {
+        if(other.intervals.empty()) return *this;
+        if(intervals.empty()) return other;
+
+        return DisjointedIntervals(Interval(std::min(lb(), other.lb()), std::max(ub(), other.ub())));
+
     }
 
+    int ub() const {
+        if (intervals.empty()) return 0;
+        return intervals.rbegin()->ub();
+    }
+
+    int lb() const {
+        if (intervals.empty()) return 0;
+        return intervals.begin()->lb();
+    }
 
     
     /**
@@ -225,8 +238,8 @@ public:
 
         auto a_shifted = a.shiftIntervals(other_ub);
         auto b_shifted = b.shiftIntervals(other_lb);
-         
-        a_shifted.join(b_shifted);
+
+        a_shifted = a_shifted.join(b_shifted);
         return a_shifted;
     }
 
@@ -242,7 +255,7 @@ public:
 
         auto a_shifted = a.shiftIntervals(-other_lb);
         auto b_shifted = b.shiftIntervals(-other_ub);
-        a_shifted.join(b_shifted);
+        a_shifted =  a_shifted.join(b_shifted);
         return a_shifted;
     }
 

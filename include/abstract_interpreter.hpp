@@ -12,9 +12,9 @@
 #include <variant>
 #include <assert.h>
 
+
 using InvariantsSystem = std::vector<Invariant>;
 using SystemSolverComponents = std::vector<std::unique_ptr<semantics::ControlPointAction>>;
-
 class AbstractInterpreter {
 private:
     // Components of the function which will update each invariant in the equational system

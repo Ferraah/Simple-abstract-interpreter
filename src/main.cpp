@@ -33,9 +33,10 @@ int main(int argc, char** argv) {
     ai.init_equations(ast);     
 
     ai.solve_equations();
+    std::cout << std::endl;
+    ai.print_invariants(); 
+    std::cout << std::endl;
     ai.print_warnings();
-    ai.print_invariants();
-    
 
     return 0;
 }

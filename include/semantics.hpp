@@ -7,6 +7,7 @@
 #include <functional>
 #include <utility>
 #include <algorithm>
+#include <vector>
 #include <memory>
 
 namespace semantics {
@@ -62,6 +63,7 @@ namespace semantics {
         public:
             explicit Variable(const std::string& name) : name(name) {}
             DisjointedIntervals evaluate(const Invariant& invariant) const override {
+                assert(invariant.contains(name));
                 return invariant[name];
             }
     };
@@ -81,30 +83,33 @@ namespace semantics {
         DisjointedIntervals evaluate(const Invariant& invariant) const override {
             DisjointedIntervals lval = left->evaluate(invariant);
             DisjointedIntervals rval = right->evaluate(invariant);
-            switch (op) {
-                case BinOp::ADD: return lval + rval;
-                case BinOp::SUB: return lval - rval;
-                case BinOp::MUL: return lval * rval;
-                case BinOp::DIV: {
 
+            DisjointedIntervals result;
+            switch (op) {
+                case BinOp::ADD: result = lval + rval; break;
+                case BinOp::SUB: result = lval - rval; break;
+                case BinOp::MUL: result = lval * rval; break;
+                case BinOp::DIV: {
                     if(rval == DisjointedIntervals(Interval(0,0))){
-                        add_warning_to_list("[ERROR] Division by zero detected!");
+                    add_warning_to_list("[ERROR] Division by zero detected!");
                     }
                     else if(rval.contains(0))
-                        add_warning_to_list("[WARNING] Possible division by zero");
-                    return lval / rval;
+                    add_warning_to_list("[WARNING] Possible division by zero");
+                    result = lval / rval;
+                    break;
                 }
                 default: {
                     throw std::runtime_error("Unknown binary operator");
                 }
             }
+            return result;
         }
     };
 
     class ControlPointAction {
         public:
             virtual ~ControlPointAction() = default;
-            virtual void execute(std::vector<Invariant> &invariants) const = 0; // Execute the action on the current Invariants
+            virtual void execute(std::vector<Invariant> &prev_invariants, std::vector<Invariant> &new_invariants) const = 0; // Execute the action on the current Invariants
     };
 
 
@@ -116,14 +121,14 @@ namespace semantics {
         explicit JoinInvariants(size_t target_control_point, std::vector<size_t> control_points)
             : control_points(std::move(control_points)), target_control_point(target_control_point) {};
 
-        void execute(std::vector<Invariant> &invariants) const override {
-            Invariant &target_invariant = invariants[target_control_point];
+        void execute(std::vector<Invariant> &prev_invariants, std::vector<Invariant> &new_invariants) const { // Execute the action on the current Invariants
+            Invariant &target_invariant = new_invariants[target_control_point];
 
             // Deep copy of first element to join
-            target_invariant = Invariant(invariants[control_points[0]]); 
+            target_invariant = Invariant(prev_invariants[control_points[0]]); 
             for(size_t i = 1; i < control_points.size(); i++){
                 // Join the others
-                target_invariant = target_invariant.join(invariants[control_points[i]]);
+                target_invariant = target_invariant.join(prev_invariants[control_points[i]]);
             }
         }
     };
@@ -139,13 +144,22 @@ namespace semantics {
         virtual ~Command() = default;
         virtual void execute(const Invariant& input, Invariant& output) const = 0; // Execute the command
 
-        void execute(std::vector<Invariant> &invariants) const override {
-            //std::cout << "Executing command from " << input_cp_id << " to " << output_cp_id << std::endl;
-            assert(invariants.size() > 0);
-            assert(input_cp_id < invariants.size());
-            assert(output_cp_id < invariants.size());
-            invariants[output_cp_id] = Invariant(invariants[input_cp_id]);
-            execute(invariants[input_cp_id], invariants[output_cp_id]);
+        // Run a commmand on the invariants at time t to generate the outpoints at time t+1
+        void execute(std::vector<Invariant> &prev_invariants, std::vector<Invariant> &next_invariants) const override {
+            
+
+            // Modify the new invariant based on the previous ones
+            assert(input_cp_id < prev_invariants.size());
+            assert(output_cp_id < next_invariants.size());
+
+            // The command takes in input the invariant at location point input_cp_id and saves the result in the invariant at location point output_cp_id
+            bool is_zero_invariant = prev_invariants[input_cp_id].get_is_zero_invariant();
+            
+            if(is_zero_invariant || (prev_invariants[input_cp_id].size() > 0)){
+                //std::cout << "Executing command from " << input_cp_id << " to " << output_cp_id << std::endl;
+                //std::cout << "Size of the invariant at " << input_cp_id << " is " << prev_invariants[input_cp_id].size() << std::endl;
+                execute(prev_invariants[input_cp_id], next_invariants[output_cp_id]);
+            }
         }
     };
 
@@ -158,6 +172,15 @@ namespace semantics {
         Assignment(const std::string& variable, std::unique_ptr<Expr> expression, size_t input_cp_id, size_t output_cp_id)
             : Command(input_cp_id, output_cp_id), variable(variable), expression(std::move(expression)) {}
         void execute(const Invariant& input, Invariant& output) const override {
+
+            // Copy the old invariant
+            output = input; 
+
+            // Check if the variable has already been declared
+            assert(input.contains(variable));
+
+            // Assign a value to a variable already declared in the invariant
+            // Evaluate the expression from the variables in the input invariant
             output[variable] = expression->evaluate(input);
         }
     };
@@ -168,7 +191,15 @@ namespace semantics {
         explicit Declaration(const std::string& variable, size_t input_cp_id) : Command(input_cp_id), variable(variable) {}
         explicit Declaration(const std::string& variable, size_t input_cp_id, size_t output_cp_id) : Command(input_cp_id, output_cp_id), variable(variable) {}
         void execute(const Invariant& input, Invariant& output) const override {
-            output[variable] = DisjointedIntervals(Interval());
+
+            // Copy the old invariant
+            output = input;
+
+            // Check if the variable has already been declared
+            assert(!input.contains(variable));
+
+            // Update the target value
+            output[variable] = DisjointedIntervals(Interval(INT_MIN, INT_MAX));
         }
     };
 
@@ -182,10 +213,13 @@ namespace semantics {
         explicit Assert(std::unique_ptr<BoolExpr> expression, std::function<void(std::string)> add_warning_to_list, size_t input_cp_id, size_t output_cp_id)
             : Command(input_cp_id, output_cp_id), expression(std::move(expression)), add_warning_to_list(add_warning_to_list) {}
         void execute(const Invariant& input, Invariant& output) const override {
+
             bool result = expression->evaluate(input);
             if(!result){
                 add_warning_to_list("[ERROR] Assertion failed!");
             }
+
+            output = input;
         }
     };
 
@@ -199,24 +233,31 @@ namespace semantics {
         explicit Filter(LogicOp op, const std::string& left_variable_name, std::unique_ptr<Expr> right_expression, size_t input_cp_id, size_t output_cp_id) : left_variable_name(left_variable_name), right_expression(std::move(right_expression)), op(op), Command(input_cp_id, output_cp_id) {}
 
         void execute(const Invariant& input, Invariant& output) const override{
+            
+            output = input;
+
             DisjointedIntervals left = input[left_variable_name];
-            std::cout << "Left variable " << left_variable_name << " has value " << left << std::endl;
+            //std::cout << "Left variable " << left_variable_name << " has value " << left << std::endl;
             DisjointedIntervals right = right_expression->evaluate(input);
-            std::cout << "Right expression has value " << right << std::endl;
-            std::cout << "Filtering variable " << left_variable_name << " with operation " << op << " and value " << right << std::endl;
-            std::cout << "Before filtering: " << left << std::endl;
+            // std::cout << "Right expression has value " << right << std::endl;
+            // std::cout << "Filtering variable " << left_variable_name << " with operation " << op << " and value " << right << std::endl;
+            // std::cout << "Before filtering: " << left << std::endl;
+
+            // Limited to constants for now
+            assert(right.ub() == right.lb());
+
             switch (op){
                 case LogicOp::LE:
-                    output[left_variable_name].filter_l(right);
+                    output[left_variable_name] =  output[left_variable_name].meet(Interval(INT_MIN, right.ub()-1));
                     break;
                 case LogicOp::LEQ:
-                    output[left_variable_name].filter_leq(right);
+                    output[left_variable_name] = output[left_variable_name].meet(Interval(INT_MIN, right.ub()));
                     break;
                 case LogicOp::GE:
-                    output[left_variable_name].filter_g(right);
+                    output[left_variable_name] = output[left_variable_name].meet(Interval(right.lb()+1, INT_MAX));
                     break;
                 case LogicOp::GEQ:
-                    output[left_variable_name].filter_geq(right);
+                    output[left_variable_name] = output[left_variable_name].meet(Interval(right.lb(), INT_MAX));
                     break;
                 case LogicOp::EQ:
                     output[left_variable_name].filter_eq(right);
@@ -226,44 +267,11 @@ namespace semantics {
                     break;
             }
 
-            std::cout << "After filtering: " << output[left_variable_name] << std::endl;
         }
     };
 
         
-/*
-    class Filter : public Command {
-        std::string variable;
-        DisjointedIntervals DisjointedIntervals_filter;
-        LogicOp op;
-    public:
-        explicit Filter(LogicOp op, const std::string& variable, DisjointedIntervals DisjointedIntervals_filter) : variable(variable), DisjointedIntervals_filter(DisjointedIntervals_filter), op(op) {}
 
-        void execute(Invariant& invariant) const override{
-
-            switch (op){
-                case LogicOp::LE:
-                    invariant[variable].
-                    break;
-                case LogicOp::LEQ:
-                    invariant[variable] = 
-                    break;
-                case LogicOp::GE:
-                    invariant[variable] = invariant[variable].filter_ge(val);
-                    break;
-                case LogicOp::GEQ:
-                    invariant[variable] = invariant[variable].filter_geq(val);
-                    break;
-                case LogicOp::EQ:
-                    invariant[variable] = invariant[variable].filter_eq(val);
-                    break;
-                case LogicOp::NEQ:
-                    invariant[variable] = invariant[variable].filter_neq(val);
-                    break;
-            }
-        }
-    }
-*/
     
 }
 

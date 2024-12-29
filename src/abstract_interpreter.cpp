@@ -250,8 +250,57 @@ void AbstractInterpreter::init_equations(const ASTNode& node) {
             }
             return;
         }
+    }
+    else if(node.type == NodeType::WHILELOOP){
+        if(std::get<std::string>(node.value) == "WhileLoop"){
+            std::cout << "[Log] While loop found." << std::endl;
 
+            // ROOT of WHILELOOP
+            ASTNode condition = node.children[0];
+            ASTNode body = node.children[1];
 
+            // Retrieve the logic operation of the WHILE condition
+            ASTNode logic_op_node = condition.children[0];
+            assert(logic_op_node.type == NodeType::LOGIC_OP);
+            assert(logic_op_node.children[0].type == NodeType::VARIABLE);
+            LogicOp logic_op = std::get<LogicOp>(logic_op_node.value);
+
+            // Retrieve the left variable name
+            std::string left_var_name = std::get<std::string>(logic_op_node.children[0].value);
+
+            // Retrieve the right expression
+            // FOR NOW, WE ONLY CONSIDER THE CASE WHERE THE RIGHT EXPRESSION IS AN INTEGER
+            assert(logic_op_node.children[1].type == NodeType::INTEGER);
+            auto right_expr = std::make_unique<Constant>(std::get<int>(logic_op_node.children[1].value));
+
+            
+            // Get the last location point, before running the branches 
+            size_t original_cp_id = commands.size(); // L0
+
+            // Create the filter command for the WHILE condition
+            // Next invariant will be a join of LO and the last one in the body. We will substitute this command later
+            commands.push_back(std::make_unique<JoinInvariants>(original_cp_id + 1, std::vector<size_t>{original_cp_id, original_cp_id})); // L1
+            size_t join_cp_id = commands.size(); // L1
+
+            // Add variable branching, form the joined invariant
+            auto right_expr_copy = std::make_unique<Constant>(*dynamic_cast<Constant*>(right_expr.get()));
+            commands.push_back(std::make_unique<Filter>(logic_op, left_var_name, std::move(right_expr), join_cp_id)); // L2
+
+            // Evaluate the body, adding all the block commands to the list
+            for(const auto& child : body.children){
+                init_equations(child);
+            }
+            // Save the last control point id of the body to later join it with the condition
+            size_t body_last_cp_id = commands.size(); // LK (last control point of the body)
+            std::cout << "[Log] Body last control point id: " << body_last_cp_id << std::endl;
+
+            // Substitutes the incomplete L1 command with the complete one
+            commands[join_cp_id-1] = std::make_unique<JoinInvariants>(join_cp_id, std::vector<size_t>{original_cp_id, body_last_cp_id}); // L1 = L0 U LK
+
+            // Create the inverse filter command for the exit of while condition
+            commands.push_back(std::make_unique<Filter>(get_opposite(logic_op), left_var_name, std::move(right_expr_copy), join_cp_id, commands.size()+1)); // LK+1
+            return;
+        }
     }
     
 
@@ -267,30 +316,24 @@ void AbstractInterpreter::init_equations(const ASTNode& node) {
  */
 bool AbstractInterpreter::solve_step() {
 
-    std::cout << "[Log] Solving step." << std::endl;
 
-    InvariantsSystem prev_state(invariants);
+    InvariantsSystem new_invariants(commands.size()+1, Invariant());
+    new_invariants[0].set_zero_invariant(true);
 
     // Executing F, i.e running each of its component
     for(auto& command : commands){
-        command->execute(invariants);   
-        // std::cout << "[Log] Command executed."<< std::endl;
-        // print_invariants();
-        // std::cout << std::endl;
+        command->execute(invariants, new_invariants);   
     }
 
+    bool result = invariants == new_invariants;
+    invariants = new_invariants;
 
-    std::cout << "[Log] Invariants after the step." << std::endl;
-    print_invariants();
-    std::cout << std::endl;
+    // std::cout << "[Log] Invariants after the step." << std::endl;
+    // print_invariants();
+    // std::cout << std::endl;
 
     // Check if the fixed point is reached
-    if(prev_state == invariants){
-        return true;
-    }else{
-        return false;
-    }
-    
+    return result; 
 }
 
 void AbstractInterpreter::solve_equations() {
@@ -298,14 +341,16 @@ void AbstractInterpreter::solve_equations() {
     std::cout << "[Log] Number of commands: " << commands.size() << std::endl;
 
     // For each control point, we have created an action that will be executed and will modify that control point invariant
-    // We start from the first control point, which is the initial state of the program and contains empty invariants
-    // The first control point is empty
+    // We start from the first control point, which is the initial state of the program and contains an invariant marked as 
+    // contaning all possible assignments
     invariants = InvariantsSystem(commands.size()+1, Invariant());
+    invariants[0].set_zero_invariant(true);
 
     int iterations = 0;
     // Solve the equations until the fixed point is reached
     bool fixed_point_reached = false;
     do{
+        std::cout << "[Log] Solving step: " << iterations << std::endl;
         fixed_point_reached = solve_step();
         iterations++;
     }while(!fixed_point_reached);
