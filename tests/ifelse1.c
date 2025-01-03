@@ -1,8 +1,8 @@
 int a;
 
 void main() {
-  /*!npk a between 0 and 3 */
-  if(a == 1) {
+  /*!npk a between 0 and 1 */
+  if(a == 0) {
     a = 10;
   }
   else {

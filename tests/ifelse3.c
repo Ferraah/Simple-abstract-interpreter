@@ -3,7 +3,7 @@ int b;
 
 void main() {
   /*!npk a between 0 and 10 */
-  /*!npk b between 0 and 2*/
+  /*!npk b between 0 and 2 */
   if(b == 0) {
     a = 1;
   }

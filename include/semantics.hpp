@@ -4,27 +4,42 @@
 #include "invariant.hpp"
 #include "interval.hpp"
 #include "ast.hpp"
+
 #include <functional>
 #include <utility>
 #include <algorithm>
 #include <vector>
 #include <memory>
 
+
+/**
+ * Classes related to the implementation of the abstract semantics concepts involved in the abstract interpretation.
+ */
 namespace semantics {
 
 
+
+    /**
+     * Implements an expression evaluation. 
+     */
     class Expr {
         public:
             virtual ~Expr() = default;
             virtual DisjointedIntervals evaluate(const Invariant& invariant) const = 0; // Evaluate the expression
     };
 
+    // Unique pointer to Expression
+    using ExprPointer = std::shared_ptr<Expr>;
+
+    /**
+     * Implements a boolean expression. 
+     */
     class BoolExpr {
-        std::unique_ptr<Expr> left;
-        std::unique_ptr<Expr> right;
+        ExprPointer left;
+        ExprPointer right;
         LogicOp op;
         public:
-        explicit BoolExpr(LogicOp op, std::unique_ptr<Expr> left, std::unique_ptr<Expr> right) : left(std::move(left)), right(std::move(right)), op(op) {}
+        explicit BoolExpr(LogicOp op, ExprPointer left, ExprPointer right) : left(std::move(left)), right(std::move(right)), op(op) {}
             ~BoolExpr() = default;
             bool evaluate(const Invariant& invariant){
                 DisjointedIntervals lval = left->evaluate(invariant);
@@ -43,6 +58,11 @@ namespace semantics {
             }; // Evaluate the expression
     };
 
+    using BoolExprPointer = std::shared_ptr<BoolExpr>;
+
+    /**
+     * Expression which, when evaluated, outputs a fixed interval, indipendently from the input invariant and variables.
+     */
     class Constant : public Expr {
 
         int left_value;
@@ -56,28 +76,37 @@ namespace semantics {
             }
     };
 
+    /**
+     * Expression which, when evaluated, outputs the content of a variable at a control point. 
+     */
     class Variable : public Expr {
 
+        // Variable name
         std::string name;
 
         public:
             explicit Variable(const std::string& name) : name(name) {}
+
             DisjointedIntervals evaluate(const Invariant& invariant) const override {
+                
                 assert(invariant.contains(name));
                 return invariant[name];
             }
     };
 
-
+    /**
+     * Expression which, when evaluated, outputs the result of a binary operation between other Expressions. 
+     * Could be recursive with nested Binary operations.  
+     */
     class BinaryOp : public Expr {
 
-        BinOp op; // e.g., '+', '-', '*', '/'
-        std::unique_ptr<Expr> left;
-        std::unique_ptr<Expr> right;
+        BinOp op;  // Ast node Binary op
+        ExprPointer left;
+        ExprPointer right;
         std::function<void(std::string)> add_warning_to_list;
 
     public:
-        BinaryOp(BinOp op, std::unique_ptr<Expr> left, std::unique_ptr<Expr> right, std::function<void(std::string)> add_warning_to_list)
+        BinaryOp(BinOp op, ExprPointer left, ExprPointer right, std::function<void(std::string)> add_warning_to_list)
             : op(op), left(std::move(left)), right(std::move(right)), add_warning_to_list(add_warning_to_list) {}
 
         DisjointedIntervals evaluate(const Invariant& invariant) const override {
@@ -106,15 +135,31 @@ namespace semantics {
         }
     };
 
+
+    //----------------------- ACTIONS ON INVARIANTS --------------------
+
+    /**
+     * A Control point action could be a join between to invariants or a command on an invariant.
+     */
     class ControlPointAction {
         public:
             virtual ~ControlPointAction() = default;
+            /**
+             * @param prev_invariants List of all previous invariants at time t-1
+             * @param new_invariants List of the next invariants which are going to be updated at time t by the action
+             */
             virtual void execute(std::vector<Invariant> &prev_invariants, std::vector<Invariant> &new_invariants) const = 0; // Execute the action on the current Invariants
     };
 
-
+    /**
+     * Join multiple invariants into one
+     */
     class JoinInvariants : public ControlPointAction {
+
+        // Control points to join
         std::vector<size_t> control_points;
+
+        // Control point to save the result into  
         size_t target_control_point;
 
     public:
@@ -124,21 +169,26 @@ namespace semantics {
         void execute(std::vector<Invariant> &prev_invariants, std::vector<Invariant> &new_invariants) const { // Execute the action on the current Invariants
             Invariant &target_invariant = new_invariants[target_control_point];
 
-            // Deep copy of first element to join
+            // Start by copying the first invariant to join 
             target_invariant = Invariant(prev_invariants[control_points[0]]); 
+
+            // Join all the others
             for(size_t i = 1; i < control_points.size(); i++){
-                // Join the others
                 target_invariant = target_invariant.join(prev_invariants[control_points[i]]);
             }
         }
     };
-
+    /**
+     * Command, which modify an invariant given another one
+     */
     class Command : public ControlPointAction{
        protected:
-           size_t input_cp_id; 
-           size_t output_cp_id;
+           size_t input_cp_id; // Input control point
+           size_t output_cp_id; // Output control point
     public:
         Command(size_t input_cp_id, size_t output_cp_id) : input_cp_id(input_cp_id), output_cp_id(output_cp_id){}
+
+        // Temporary fix for solver_components from CP 0 to CP 1
         Command(size_t input_cp_id) : input_cp_id(input_cp_id), output_cp_id(input_cp_id < 0 ? 0 : input_cp_id+1){}
 
         virtual ~Command() = default;
@@ -165,11 +215,11 @@ namespace semantics {
 
     class Assignment : public Command {
         std::string variable;
-        std::unique_ptr<Expr> expression;
+        ExprPointer expression;
     public:
-        Assignment(const std::string& variable, std::unique_ptr<Expr> expression, size_t input_cp_id)
+        Assignment(const std::string& variable, ExprPointer expression, size_t input_cp_id)
             : Command(input_cp_id), variable(variable), expression(std::move(expression)) {}
-        Assignment(const std::string& variable, std::unique_ptr<Expr> expression, size_t input_cp_id, size_t output_cp_id)
+        Assignment(const std::string& variable, ExprPointer expression, size_t input_cp_id, size_t output_cp_id)
             : Command(input_cp_id, output_cp_id), variable(variable), expression(std::move(expression)) {}
         void execute(const Invariant& input, Invariant& output) const override {
 
@@ -205,12 +255,12 @@ namespace semantics {
 
 
     class Assert : public Command {
-        std::unique_ptr<BoolExpr> expression;
+        BoolExprPointer expression;
         std::function<void(std::string)> add_warning_to_list;
     public:
-        explicit Assert(std::unique_ptr<BoolExpr> expression, std::function<void(std::string)> add_warning_to_list, size_t input_cp_id)
+        explicit Assert(BoolExprPointer expression, std::function<void(std::string)> add_warning_to_list, size_t input_cp_id)
             : Command(input_cp_id), expression(std::move(expression)), add_warning_to_list(add_warning_to_list) {}
-        explicit Assert(std::unique_ptr<BoolExpr> expression, std::function<void(std::string)> add_warning_to_list, size_t input_cp_id, size_t output_cp_id)
+        explicit Assert(BoolExprPointer expression, std::function<void(std::string)> add_warning_to_list, size_t input_cp_id, size_t output_cp_id)
             : Command(input_cp_id, output_cp_id), expression(std::move(expression)), add_warning_to_list(add_warning_to_list) {}
         void execute(const Invariant& input, Invariant& output) const override {
 
@@ -226,11 +276,11 @@ namespace semantics {
 
     class Filter : public Command {
         std::string left_variable_name;
-        std::unique_ptr<Expr> right_expression;
+        ExprPointer right_expression;
         LogicOp op;
     public:
-        explicit Filter(LogicOp op, const std::string& left_variable_name, std::unique_ptr<Expr> right_expression, size_t input_cp_id) : left_variable_name(left_variable_name), right_expression(std::move(right_expression)), op(op), Command(input_cp_id) {}
-        explicit Filter(LogicOp op, const std::string& left_variable_name, std::unique_ptr<Expr> right_expression, size_t input_cp_id, size_t output_cp_id) : left_variable_name(left_variable_name), right_expression(std::move(right_expression)), op(op), Command(input_cp_id, output_cp_id) {}
+        explicit Filter(LogicOp op, const std::string& left_variable_name, ExprPointer right_expression, size_t input_cp_id) : left_variable_name(left_variable_name), right_expression(std::move(right_expression)), op(op), Command(input_cp_id) {}
+        explicit Filter(LogicOp op, const std::string& left_variable_name, ExprPointer right_expression, size_t input_cp_id, size_t output_cp_id) : left_variable_name(left_variable_name), right_expression(std::move(right_expression)), op(op), Command(input_cp_id, output_cp_id) {}
 
         void execute(const Invariant& input, Invariant& output) const override{
             

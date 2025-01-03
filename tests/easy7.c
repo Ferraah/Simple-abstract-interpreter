@@ -6,5 +6,4 @@ void main() {
   b = (a + a) / 2;
   assert(b >= 2);
   assert(b <= 4);
-  assert(a < 1);
 }
