@@ -279,13 +279,12 @@ void AbstractInterpreter::init_equations(const ASTNode& node) {
             // Get the last location point, before running the branches 
             size_t before_branch_id = solver_components.size(); // L0
 
-            // Create the filter command for the WHILE condition
             // Next invariant will be a join of LO and the last one in the body. We will substitute this command later, this is just a placeholder 
             // to keep track of the control point id
-            
             solver_components.push_back(nullptr);
             size_t join_cp_id = solver_components.size(); // L1
 
+            // Create the filter command for the WHILE condition
             // Branch on the variable condition, for the while body
             solver_components.push_back(std::make_shared<Filter>(logic_op, left_var_name, right_expr, join_cp_id)); // L2
 
@@ -298,6 +297,7 @@ void AbstractInterpreter::init_equations(const ASTNode& node) {
             std::cout << "[Log] Body last control point id: " << body_last_cp_id << std::endl;
 
             // Substitutes the incomplete L1 command with the complete one
+            // -1 because the list of solver_components starts from the 1 control point and not 0
             solver_components[join_cp_id-1] = std::make_shared<JoinInvariants>(join_cp_id, std::vector<size_t>{before_branch_id, body_last_cp_id}); // L1 = L0 U LK
 
             // Create the inverse filter command for the exit of while condition
@@ -328,14 +328,10 @@ bool AbstractInterpreter::solve_step() {
         command->execute(invariants, new_invariants);   
     }
 
+    // Check fixed point reached
     bool result = invariants == new_invariants;
+
     invariants = new_invariants;
-
-    // std::cout << "[Log] Invariants after the step." << std::endl;
-    // print_invariants();
-    // std::cout << std::endl;
-
-    // Check if the fixed point is reached
     return result; 
 }
 
@@ -343,7 +339,7 @@ void AbstractInterpreter::solve_equations() {
 
     std::cout << "[Log] Number of solver_components: " << solver_components.size() << std::endl;
 
-    // For each control point, we have created an action that will be executed and will modify that control point invariant
+    // For each control point, we have created an action that will be executed and will modify that control point invariant.
     // We start from the first control point, which is the initial state of the program and contains an invariant marked as 
     // contaning all possible assignments
     invariants = InvariantsSystem(solver_components.size()+1, Invariant());

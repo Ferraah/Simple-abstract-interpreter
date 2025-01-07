@@ -8,8 +8,10 @@ void main() {
   z = 0;
 
   /*!npk b between 1 and 2 */
-  c = a / b;
 
+  // No errors expected
+  c = a / b;
+  // Error expected
   c = (a / z)/z;
-  assert(a ==1);
+
 }

@@ -71,7 +71,7 @@ public:
 
     void print() const {
         if(variable_interval.empty()) {
-            std::cout << "All asn." << std::endl;
+            std::cout << "No assignments." << std::endl;
         }else{
             for(const auto& [var, interval] : variable_interval) {
                 std::cout << var << " -> " << interval << std::endl;
